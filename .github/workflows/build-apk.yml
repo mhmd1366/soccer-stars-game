@@ -38,6 +38,53 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Enable Android Immersive Fullscreen in MainActivity
+        run: |
+          python3 - << 'EOF'
+          import glob
+          files = glob.glob("android/app/src/main/java/**/MainActivity.java", recursive=True)
+          for path in files:
+              code = open(path, encoding="utf-8").read()
+              pkg = [line for line in code.splitlines() if line.startswith("package ")][0]
+              new_code = pkg + """
+
+          import android.os.Bundle;
+          import android.view.View;
+          import androidx.core.view.WindowCompat;
+          import androidx.core.view.WindowInsetsCompat;
+          import androidx.core.view.WindowInsetsControllerCompat;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  enableImmersiveMode();
+              }
+
+              @Override
+              public void onWindowFocusChanged(boolean hasFocus) {
+                  super.onWindowFocusChanged(hasFocus);
+                  if (hasFocus) enableImmersiveMode();
+              }
+
+              private void enableImmersiveMode() {
+                  WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+                  View decorView = getWindow().getDecorView();
+                  WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decorView);
+                  if (controller != null) {
+                      controller.hide(WindowInsetsCompat.Type.systemBars());
+                      controller.setSystemBarsBehavior(
+                          WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                      );
+                  }
+              }
+          }
+          """
+              open(path, "w", encoding="utf-8").write(new_code)
+              print("Patched fullscreen MainActivity:", path)
+          EOF
+
       - name: Build Debug APK
         working-directory: android
         run: |

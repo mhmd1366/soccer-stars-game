@@ -1,0 +1,8 @@
+{
+  "appId": "com.soccerstars.fingerfootball",
+  "appName": "فوتبال انگشتی",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#04130d"
+  }
+}

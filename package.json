@@ -1,0 +1,16 @@
+{
+  "name": "soccer-stars-game",
+  "version": "1.0.0",
+  "description": "فوتبال انگشتی (Soccer Stars) - بازی تحت وب و اندروید",
+  "private": true,
+  "scripts": {
+    "prepare-www": "mkdir -p www/js && cp index.html style.css www/ && cp js/*.js www/js/"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}

@@ -73,6 +73,7 @@
   let pitchCache = null;
   let scale = 1;
   let dpr = 1;
+  let isPortrait = false;
   let rafId = null;
   let lastFrameTime = 0;
 
@@ -94,6 +95,7 @@
 
     els.menuSoundBtn = document.getElementById('menu-sound-btn');
     els.menuHapticsBtn = document.getElementById('menu-haptics-btn');
+    els.hudFullscreenBtn = document.getElementById('hud-fullscreen-btn');
     els.hudSoundBtn = document.getElementById('hud-sound-btn');
     els.hudSettingsBtn = document.getElementById('hud-settings-btn');
     els.hudMenuBtn = document.getElementById('hud-menu-btn');
@@ -285,6 +287,10 @@
       startNewMatch();
     });
 
+    if (els.hudFullscreenBtn) {
+      els.hudFullscreenBtn.addEventListener('click', toggleFullscreen);
+    }
+    document.addEventListener('fullscreenchange', () => setTimeout(resizeCanvas, 80));
     els.hudSettingsBtn.addEventListener('click', openSettingsModal);
     els.closeSettingsBtn.addEventListener('click', closeSettingsModal);
     els.hudMenuBtn.addEventListener('click', returnToMenu);
@@ -349,7 +355,9 @@
 
     updateHUDMetadata();
     resetPositionsForKickoff(1);
+    tryEnterMobileFullscreen();
     resizeCanvas();
+    setTimeout(resizeCanvas, 120);
     Audio.playWhistle('start');
   }
 
@@ -474,8 +482,51 @@
   }
 
   /* ===================== کنترل‌های لمسی و موس ===================== */
+  function toggleFullscreen() {
+    Audio.unlock();
+    Audio.playUiClick();
+    try {
+      const docEl = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+        if (req) {
+          Promise.resolve(req.call(docEl)).catch(() => {});
+        }
+      } else {
+        const ex = document.exitFullscreen || document.webkitExitFullscreen;
+        if (ex) {
+          Promise.resolve(ex.call(document)).catch(() => {});
+        }
+      }
+    } catch (_) {
+      // مرورگر از API تمام‌صفحه پشتیبانی نمی‌کند
+    }
+  }
+
+  function tryEnterMobileFullscreen() {
+    const isTouchDevice = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (!isTouchDevice) return;
+    try {
+      const docEl = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+        if (req) {
+          Promise.resolve(req.call(docEl)).catch(() => {});
+        }
+      }
+    } catch (_) {}
+  }
+
   function clientToWorld(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
+    if (isPortrait) {
+      const sx = ((clientX - rect.left) / rect.width) * WORLD.height;
+      const sy = ((clientY - rect.top) / rect.height) * WORLD.width;
+      return {
+        x: WORLD.width - sy,
+        y: sx
+      };
+    }
     return {
       x: ((clientX - rect.left) / rect.width) * WORLD.width,
       y: ((clientY - rect.top) / rect.height) * WORLD.height
@@ -1251,10 +1302,18 @@
       ctx.stroke();
       ctx.setLineDash([]);
 
+      ctx.save();
       ctx.font = '700 13px Vazirmatn, Tahoma, sans-serif';
-      ctx.fillStyle = 'rgba(241, 245, 249, 0.9)';
+      ctx.fillStyle = 'rgba(241, 245, 249, 0.95)';
       ctx.textAlign = 'center';
-      ctx.fillText('لغو شوت', p.x, p.y - p.r - 18);
+      if (isPortrait) {
+        ctx.translate(p.x + p.r + 22, p.y);
+        ctx.rotate(Math.PI / 2);
+        ctx.fillText('لغو شوت', 0, 0);
+      } else {
+        ctx.fillText('لغو شوت', p.x, p.y - p.r - 18);
+      }
+      ctx.restore();
       ctx.restore();
       return;
     }
@@ -1373,6 +1432,10 @@
 
     ctx.save();
     ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+    if (isPortrait) {
+      ctx.translate(0, WORLD.width);
+      ctx.rotate(-Math.PI / 2);
+    }
 
     // لرزش ملایم دوربین هنگام گل و ضربات سنگین
     if (state.shakeTime > 0) {
@@ -1410,10 +1473,16 @@
   /* ===================== تنظیم اندازه واکنش‌گرا ===================== */
   function resizeCanvas() {
     if (!els.stageWrap || state.screen !== 'game') return;
-    const availW = Math.max(280, els.stageWrap.clientWidth - 8);
-    const availH = Math.max(180, els.stageWrap.clientHeight - 8);
+    const availW = Math.max(220, els.stageWrap.clientWidth - 2);
+    const availH = Math.max(220, els.stageWrap.clientHeight - 2);
 
-    const aspect = WORLD.width / WORLD.height;
+    // در صفحه عمودی موبایل زمین به‌صورت خودکار ۹۰ درجه می‌چرخد تا تمام صفحه را پر کند
+    isPortrait = availH > availW * 1.08;
+
+    const logicalW = isPortrait ? WORLD.height : WORLD.width;
+    const logicalH = isPortrait ? WORLD.width : WORLD.height;
+    const aspect = logicalW / logicalH;
+
     let cssW = availW;
     let cssH = cssW / aspect;
 
@@ -1423,7 +1492,7 @@
     }
 
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    scale = cssW / WORLD.width;
+    scale = cssW / logicalW;
 
     canvas.style.width = Math.floor(cssW) + 'px';
     canvas.style.height = Math.floor(cssH) + 'px';

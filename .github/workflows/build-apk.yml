@@ -27,6 +27,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Install dependencies & prepare web assets
         run: |
@@ -38,58 +39,56 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: Enable Android Immersive Fullscreen in MainActivity
+      - name: Add Google Maven Central Mirror (Avoid 429 Rate Limit)
         run: |
-          python3 - << 'EOF'
-          import glob
-          files = glob.glob("android/app/src/main/java/**/MainActivity.java", recursive=True)
-          for path in files:
-              code = open(path, encoding="utf-8").read()
-              pkg = [line for line in code.splitlines() if line.startswith("package ")][0]
-              new_code = pkg + """
+          sed -i 's|mavenCentral()|maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }\n        mavenCentral()|g' android/build.gradle
+
+      - name: Enable Android Fullscreen Mode
+        run: |
+          MAIN_ACT=$(find android/app/src/main/java -name "MainActivity.java" | head -n 1)
+          PKG_LINE=$(grep "^package " "$MAIN_ACT")
+          cat <<EOF > "$MAIN_ACT"
+          $PKG_LINE
 
           import android.os.Bundle;
           import android.view.View;
-          import androidx.core.view.WindowCompat;
-          import androidx.core.view.WindowInsetsCompat;
-          import androidx.core.view.WindowInsetsControllerCompat;
+          import android.view.WindowManager;
           import com.getcapacitor.BridgeActivity;
 
           public class MainActivity extends BridgeActivity {
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
-                  enableImmersiveMode();
+                  hideSystemUI();
               }
 
               @Override
               public void onWindowFocusChanged(boolean hasFocus) {
                   super.onWindowFocusChanged(hasFocus);
-                  if (hasFocus) enableImmersiveMode();
-              }
-
-              private void enableImmersiveMode() {
-                  WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-                  View decorView = getWindow().getDecorView();
-                  WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), decorView);
-                  if (controller != null) {
-                      controller.hide(WindowInsetsCompat.Type.systemBars());
-                      controller.setSystemBarsBehavior(
-                          WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                      );
+                  if (hasFocus) {
+                      hideSystemUI();
                   }
               }
+
+              private void hideSystemUI() {
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                  getWindow().getDecorView().setSystemUiVisibility(
+                      View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                      | View.SYSTEM_UI_FLAG_FULLSCREEN
+                      | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                      | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                      | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                      | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                  );
+              }
           }
-          """
-              open(path, "w", encoding="utf-8").write(new_code)
-              print("Patched fullscreen MainActivity:", path)
           EOF
 
       - name: Build Debug APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --max-workers=2
 
       - name: Rename APK
         run: |
@@ -107,6 +106,6 @@ jobs:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
           name: فوتبال انگشتی (نسخه اندروید APK)
           body: |
-            نسخه اندروید بازی **فوتبال انگشتی (Soccer Stars)** به‌صورت خودکار با GitHub Actions ساخته شد.
+            نسخه اندروید تمام‌صفحه بازی **فوتبال انگشتی (Soccer Stars)**.
             برای نصب روی گوشی اندروید، فایل `soccer-stars-v1.0.0.apk` را از بخش Assets زیر دانلود کنید.
           files: soccer-stars-v1.0.0.apk
